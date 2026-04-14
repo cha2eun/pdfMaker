@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF 생성기</title>
+
+<!-- Cropper -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- Kakao -->
+<script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
+
+<style>
+body { font-family:sans-serif; padding:10px; background:#f5f5f5; }
+
+.preview {
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:6px;
+}
+
+.preview img {
+  width:100%;
+  border-radius:6px;
+}
+
+button,input {
+  width:100%;
+  margin-top:6px;
+  padding:10px;
+}
+
+.modal {
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.9);
+  display:none;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+}
+
+.modal img { max-width:90%; }
+
+iframe {
+  width:100%;
+  height:400px;
+  margin-top:10px;
+}
+</style>
+</head>
+
+<body>
+
+<h3>📄 PDF 생성기</h3>
+
+<input type="file" id="fileInput" multiple accept="image/*">
+
+<button onclick="generatePDF()">PDF 생성</button>
+<button onclick="shareKakao()">카카오톡 공유</button>
+<button onclick="shareEmail()">메일 공유</button>
+
+<div class="preview" id="preview"></div>
+
+<div class="modal" id="modal">
+  <img id="cropImage">
+  <button onclick="applyCrop()">적용</button>
+  <button onclick="closeModal()">취소</button>
+</div>
+
+<iframe id="pdfPreview"></iframe>
+
+<script>
+let images = [];
+let cropper = null;
+let currentIndex = null;
+let pdfBlob = null;
+
+// 카카오 초기화
+Kakao.init("7c9908c1d0d033565b5651c7d26f5c1d");
+
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+  images = [];
+  for (let file of e.target.files){
+    const url = URL.createObjectURL(file);
+    images.push({ src:url, cropped:null });
+  }
+  renderPreview();
+});
+
+function renderPreview(){
+  const preview = document.getElementById('preview');
+  preview.innerHTML='';
+
+  images.forEach((item,index)=>{
+    const img = document.createElement('img');
+    img.src = item.cropped || item.src;
+    img.onclick = ()=> openCrop(index);
+    preview.appendChild(img);
+  });
+}
+
+function openCrop(index){
+  currentIndex = index;
+  const modal = document.getElementById('modal');
+  const image = document.getElementById('cropImage');
+
+  image.src = images[index].cropped || images[index].src;
+
+  modal.style.display='flex';
+
+  if(cropper) cropper.destroy();
+
+  cropper = new Cropper(image,{
+    viewMode:1,
+    movable:true,
+    zoomable:true,
+    scalable:true
+  });
+}
+
+function applyCrop(){
+  const canvas = cropper.getCroppedCanvas();
+  images[currentIndex].cropped = canvas.toDataURL();
+  cropper.destroy();
+  closeModal();
+  renderPreview();
+}
+
+function closeModal(){
+  document.getElementById('modal').style.display='none';
+}
+
+async function generatePDF(){
+  const { jsPDF } = window.jspdf;
+
+  const pdf = new jsPDF();
+  let x=10, y=10, w=60, h=100;
+
+  for(let i=0;i<images.length;i++){
+    const src = images[i].cropped || images[i].src;
+    pdf.addImage(src,'JPEG',x,y,w,h);
+
+    if((i+1)%3===0){
+      x=10; y+=h+10;
+    } else {
+      x+=w+5;
+    }
+  }
+
+  pdfBlob = pdf.output("blob");
+
+  const url = URL.createObjectURL(pdfBlob);
+  document.getElementById('pdfPreview').src = url;
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "result.pdf";
+  a.click();
+}
+
+// 📌 카카오 공유
+function shareKakao(){
+  if(!pdfBlob){
+    alert("PDF 먼저 생성하세요");
+    return;
+  }
+
+  Kakao.Link.sendDefault({
+    objectType: 'text',
+    text: 'PDF 생성 완료! 아래 파일을 확인하세요.',
+    link: {
+      mobileWebUrl: window.location.href,
+      webUrl: window.location.href,
+    },
+  });
+}
+
+// 📌 이메일 공유
+async function shareEmail(){
+  if(!pdfBlob){
+    alert("PDF 먼저 생성하세요");
+    return;
+  }
+
+  const file = new File([pdfBlob], "result.pdf", { type: "application/pdf" });
+
+  if(navigator.share){
+    await navigator.share({
+      files:[file],
+      title:"PDF 공유"
+    });
+  } else {
+    window.location.href = "mailto:?subject=PDF&body=첨부파일 확인";
+  }
+}
+</script>
+
+</body>
+</html>
