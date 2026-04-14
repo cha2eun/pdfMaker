@@ -5,15 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDF 생성기</title>
 
-<!-- Cropper -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-
-<!-- jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-<!-- Kakao -->
-<script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
 
 <style>
 body { font-family:sans-serif; padding:10px; background:#f5f5f5; }
@@ -24,10 +18,7 @@ body { font-family:sans-serif; padding:10px; background:#f5f5f5; }
   gap:6px;
 }
 
-.preview img {
-  width:100%;
-  border-radius:6px;
-}
+.preview img { width:100%; border-radius:6px; }
 
 button,input {
   width:100%;
@@ -63,8 +54,7 @@ iframe {
 <input type="file" id="fileInput" multiple accept="image/*">
 
 <button onclick="generatePDF()">PDF 생성</button>
-<button onclick="shareKakao()">카카오톡 공유</button>
-<button onclick="shareEmail()">메일 공유</button>
+<button onclick="sharePDF()">메일/카톡 공유</button>
 
 <div class="preview" id="preview"></div>
 
@@ -81,9 +71,6 @@ let images = [];
 let cropper = null;
 let currentIndex = null;
 let pdfBlob = null;
-
-// 카카오 초기화
-Kakao.init("7c9908c1d0d033565b5651c7d26f5c1d");
 
 document.getElementById('fileInput').addEventListener('change', async (e)=>{
   images = [];
@@ -140,17 +127,37 @@ function closeModal(){
 async function generatePDF(){
   const { jsPDF } = window.jspdf;
 
-  const pdf = new jsPDF();
-  let x=10, y=10, w=60, h=100;
+  const pdf = new jsPDF({
+    unit:'mm',
+    format:'a4'
+  });
+
+  const margin = 5;
+  const gap = 5;
+  const cols = 3;
+  const pageWidth = 210;
+
+  const imgWidth = (pageWidth - margin*2 - gap*2)/cols;
+  const imgHeight = imgWidth * 1.8;
+
+  let x = margin;
+  let y = margin;
 
   for(let i=0;i<images.length;i++){
     const src = images[i].cropped || images[i].src;
-    pdf.addImage(src,'JPEG',x,y,w,h);
+
+    pdf.addImage(src,'JPEG',x,y,imgWidth,imgHeight);
 
     if((i+1)%3===0){
-      x=10; y+=h+10;
+      x = margin;
+      y += imgHeight + gap;
+
+      if(y + imgHeight > 297){
+        pdf.addPage();
+        y = margin;
+      }
     } else {
-      x+=w+5;
+      x += imgWidth + gap;
     }
   }
 
@@ -165,31 +172,16 @@ async function generatePDF(){
   a.click();
 }
 
-// 📌 카카오 공유
-function shareKakao(){
+// ✅ 핵심 공유 기능
+async function sharePDF(){
   if(!pdfBlob){
     alert("PDF 먼저 생성하세요");
     return;
   }
 
-  Kakao.Link.sendDefault({
-    objectType: 'text',
-    text: 'PDF 생성 완료! 아래 파일을 확인하세요.',
-    link: {
-      mobileWebUrl: window.location.href,
-      webUrl: window.location.href,
-    },
+  const file = new File([pdfBlob], "result.pdf", {
+    type: "application/pdf"
   });
-}
-
-// 📌 이메일 공유
-async function shareEmail(){
-  if(!pdfBlob){
-    alert("PDF 먼저 생성하세요");
-    return;
-  }
-
-  const file = new File([pdfBlob], "result.pdf", { type: "application/pdf" });
 
   if(navigator.share){
     await navigator.share({
@@ -197,7 +189,7 @@ async function shareEmail(){
       title:"PDF 공유"
     });
   } else {
-    window.location.href = "mailto:?subject=PDF&body=첨부파일 확인";
+    alert("이 기기는 공유 기능을 지원하지 않습니다");
   }
 }
 </script>
